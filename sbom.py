@@ -1,98 +1,9 @@
-Шаг 1: Установка необходимых библиотек
-Убедитесь, что у вас установлены следующие библиотеки:
+pip install plotly networkx
 
-sh
-Copy
-1
-pip install pygraphviz json
-Также установите Graphviz на вашу систему:
 
-Для Windows: Скачайте и установите с официального сайта Graphviz .
-Для macOS: Используйте Homebrew:
-sh
-Copy
-1
-brew install graphviz
-Для Linux: Используйте пакетный менеджер (например, apt для Ubuntu):
-sh
-Copy
-1
-sudo apt-get install graphviz
-Шаг 2: Написание скрипта для преобразования и визуализации
-Создайте новый Python-скрипт, например, visualize_sbom.py, и добавьте в него следующий код:
-
-python
-Copy
-1
-2
-3
-4
-5
-6
-7
-8
-9
-10
-11
-12
-13
-14
-15
-16
-17
-18
-19
-20
-21
-22
-23
-24
-25
-26
-27
-28
-29
-30
-31
-32
-33
-34
-35
-36
-37
-38
-39
-40
-41
-42
-43
-44
-45
-46
-47
-48
-49
-50
-51
-52
-⌄
-⌄
-⌄
-⌄
-⌄
-⌄
-⌄
-⌄
-⌄
-⌄
-⌄
-⌄
-⌄
-⌄
-⌄
-⌄
 import json
-import pygraphviz as pgv
+import networkx as nx
+import plotly.graph_objects as go
 
 def parse_cyclonedx(sbom_file):
     with open(sbom_file, 'r') as f:
@@ -100,7 +11,7 @@ def parse_cyclonedx(sbom_file):
     return sbom_data
 
 def build_graph(sbom_data):
-    G = pgv.AGraph(directed=True)
+    G = nx.DiGraph()
 
     components = sbom_data.get('components', [])
     component_map = {}
@@ -128,8 +39,66 @@ def build_graph(sbom_data):
     return G
 
 def visualize_graph(G):
-    G.layout(prog='dot')
-    G.draw('dependency_graph.png')
+    pos = nx.spring_layout(G)
+
+    edge_x = []
+    edge_y = []
+    for edge in G.edges():
+        x0, y0 = pos[edge[0]]
+        x1, y1 = pos[edge[1]]
+        edge_x.extend([x0, x1, None])
+        edge_y.extend([y0, y1, None])
+
+    edge_trace = go.Scatter(
+        x=edge_x, y=edge_y,
+        line=dict(width=0.5, color='#888'),
+        hoverinfo='none',
+        mode='lines')
+
+    node_x = []
+    node_y = []
+    for node in G.nodes():
+        x, y = pos[node]
+        node_x.append(x)
+        node_y.append(y)
+
+    node_trace = go.Scatter(
+        x=node_x, y=node_y,
+        mode='markers+text',
+        text=list(G.nodes()),
+        hoverinfo='text',
+        marker=dict(
+            showscale=True,
+            colorscale='YlGnBu',
+            size=10,
+            color=[],
+            line_width=2))
+
+    node_adjacencies = []
+    node_text = []
+    for node, adjacencies in enumerate(G.adjacency()):
+        node_adjacencies.append(len(adjacencies[1]))
+        node_text.append('# of connections: '+str(len(adjacencies[1])))
+
+    node_trace.marker.color = node_adjacencies
+    node_trace.text = node_text
+
+    fig = go.Figure(data=[edge_trace, node_trace],
+                    layout=go.Layout(
+                        title='<br>Dependency Graph',
+                        titlefont_size=16,
+                        showlegend=False,
+                        hovermode='closest',
+                        margin=dict(b=20,l=5,r=5,t=40),
+                        annotations=[ dict(
+                            text="Python code: <a href='https://plotly.com/'> https://plotly.com/</a>",
+                            showarrow=False,
+                            xref="paper", yref="paper",
+                            x=0.005, y=-0.002 ) ],
+                        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False))
+                    )
+    fig.show()
 
 if __name__ == "__main__":
     sbom_file = "path_to_your_sbom.json"  # Замените на путь к вашему SBOM файлу
@@ -138,7 +107,7 @@ if __name__ == "__main__":
         G = build_graph(sbom_data)
         if G.number_of_nodes() > 0:
             visualize_graph(G)
-            print("Dependency graph saved as dependency_graph.png")
         else:
             print("No components found in the SBOM file.")
     except Exception as e:
+        print(f"Error processing the SBOM file: {e}")
