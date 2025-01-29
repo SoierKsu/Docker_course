@@ -35,7 +35,7 @@ def build_graph(sbom_data):
 
     return G
 
-def visualize_graph(G):
+def visualize_graph(G, output_html='dependency_graph.html', output_image='dependency_graph.png'):
     pos = nx.spring_layout(G)
 
     edge_x = []
@@ -94,6 +94,14 @@ def visualize_graph(G):
                         xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
                         yaxis=dict(showgrid=False, zeroline=False, showticklabels=False))
                     )
+
+    # Сохраняем график в HTML
+    fig.write_html(output_html)
+
+    # Сохраняем график в изображение (например, PNG)
+    fig.write_image(output_image)
+
+    # Отображаем график
     fig.show()
 
 if __name__ == "__main__":
@@ -102,7 +110,8 @@ if __name__ == "__main__":
         sbom_data = parse_cyclonedx(sbom_file)
         G = build_graph(sbom_data)
         if G.number_of_nodes() > 0:
-            visualize_graph(G)
+            visualize_graph(G, output_html='dependency_graph.html', output_image='dependency_graph.png')
+            print("Dependency graph saved as dependency_graph.html and dependency_graph.png")
         else:
             print("No components found in the SBOM file.")
     except Exception as e:
