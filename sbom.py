@@ -4,7 +4,7 @@
 sh
 Copy
 1
-pip install networkx matplotlib graphviz pydot
+pip install pygraphviz json
 Также установите Graphviz на вашу систему:
 
 Для Windows: Скачайте и установите с официального сайта Graphviz .
@@ -21,12 +21,78 @@ sudo apt-get install graphviz
 Шаг 2: Написание скрипта для преобразования и визуализации
 Создайте новый Python-скрипт, например, visualize_sbom.py, и добавьте в него следующий код:
 
-
+python
+Copy
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+⌄
+⌄
+⌄
+⌄
+⌄
+⌄
+⌄
+⌄
+⌄
+⌄
+⌄
+⌄
+⌄
+⌄
+⌄
+⌄
 import json
-import networkx as nx
-import matplotlib.pyplot as plt
-import pydot
-from networkx.drawing.nx_pydot import graphviz_layout
+import pygraphviz as pgv
 
 def parse_cyclonedx(sbom_file):
     with open(sbom_file, 'r') as f:
@@ -34,7 +100,7 @@ def parse_cyclonedx(sbom_file):
     return sbom_data
 
 def build_graph(sbom_data):
-    G = nx.DiGraph()
+    G = pgv.AGraph(directed=True)
 
     components = sbom_data.get('components', [])
     component_map = {}
@@ -62,9 +128,8 @@ def build_graph(sbom_data):
     return G
 
 def visualize_graph(G):
-    pos = graphviz_layout(G, prog='dot')
-    nx.draw(G, pos, with_labels=True, node_size=2000, node_color='lightblue', font_size=10, font_weight='bold')
-    plt.show()
+    G.layout(prog='dot')
+    G.draw('dependency_graph.png')
 
 if __name__ == "__main__":
     sbom_file = "path_to_your_sbom.json"  # Замените на путь к вашему SBOM файлу
@@ -73,7 +138,7 @@ if __name__ == "__main__":
         G = build_graph(sbom_data)
         if G.number_of_nodes() > 0:
             visualize_graph(G)
+            print("Dependency graph saved as dependency_graph.png")
         else:
             print("No components found in the SBOM file.")
     except Exception as e:
-        print(f"Error processing the SBOM file: {e}")
