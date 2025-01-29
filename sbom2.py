@@ -35,9 +35,14 @@ def build_graph(sbom_data):
 
     return G
 
-def visualize_graph(G, output_html='dependency_graph.html', output_image='dependency_graph.png'):
+def get_tree_layout(G):
     # Используем алгоритм размещения для создания дерева
-    pos = nx.drawing.nx_agraph.graphviz_layout(G, prog='dot')
+    pos = nx.drawing.layout.multipartite_layout(G, subset_key=lambda node: 0)  # Простое размещение по уровням
+    return pos
+
+def visualize_graph(G, output_html='dependency_graph.html', output_image='dependency_graph.png'):
+    # Получаем расположение узлов
+    pos = get_tree_layout(G)
 
     edge_x = []
     edge_y = []
