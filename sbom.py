@@ -1,6 +1,32 @@
+Шаг 1: Установка необходимых библиотек
+Убедитесь, что у вас установлены следующие библиотеки:
+
+sh
+Copy
+1
+pip install networkx matplotlib graphviz pydot
+Также установите Graphviz на вашу систему:
+
+Для Windows: Скачайте и установите с официального сайта Graphviz .
+Для macOS: Используйте Homebrew:
+sh
+Copy
+1
+brew install graphviz
+Для Linux: Используйте пакетный менеджер (например, apt для Ubuntu):
+sh
+Copy
+1
+sudo apt-get install graphviz
+Шаг 2: Написание скрипта для преобразования и визуализации
+Создайте новый Python-скрипт, например, visualize_sbom.py, и добавьте в него следующий код:
+
+
 import json
 import networkx as nx
 import matplotlib.pyplot as plt
+import pydot
+from networkx.drawing.nx_pydot import graphviz_layout
 
 def parse_cyclonedx(sbom_file):
     with open(sbom_file, 'r') as f:
@@ -36,7 +62,7 @@ def build_graph(sbom_data):
     return G
 
 def visualize_graph(G):
-    pos = nx.spring_layout(G)
+    pos = graphviz_layout(G, prog='dot')
     nx.draw(G, pos, with_labels=True, node_size=2000, node_color='lightblue', font_size=10, font_weight='bold')
     plt.show()
 
