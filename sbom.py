@@ -70,14 +70,15 @@ def visualize_graph(G, output_html='dependency_graph.html', output_image='depend
             size=10,
             color=[],
             line_width=2),
-        textposition="top center",
+        textposition="middle center",
         textfont=dict(size=10))
 
     node_adjacencies = []
     node_text = []
-    for node, adjacencies in enumerate(G.adjacency()):
-        node_adjacencies.append(len(adjacencies[1]))
-        node_text.append('# of connections: '+str(len(adjacencies[1])))
+    for node in G.nodes():
+        adjacencies = list(G.adj[node])
+        node_adjacencies.append(len(adjacencies))
+        node_text.append('# of connections: '+str(len(adjacencies)))
 
     node_trace.marker.color = node_adjacencies
     node_trace.text = list(G.nodes())
