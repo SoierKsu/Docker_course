@@ -11,16 +11,27 @@ def build_graph(sbom_data):
     G = nx.DiGraph()
 
     components = sbom_data.get('components', [])
+    component_map = {}
+
+    # Добавляем компоненты как узлы в граф
     for component in components:
-        component_name = component.get('name')
+        component_name = component.get('bom-ref')
+        if not component_name:
+            component_name = component.get('name')
         if component_name:
             G.add_node(component_name)
+            component_map[component_name] = component
 
-        dependencies = component.get('dependencies', [])
-        for dep in dependencies:
-            ref = dep.get('ref')
-            if ref:
-                G.add_edge(component_name, ref)
+    # Добавляем зависимости как ребра в граф
+    for component in components:
+        component_name = component.get('bom-ref')
+        if not component_name:
+            component_name = component.get('name')
+        
+        dependencies = component.get('dependencies', {}).get('dependsOn', [])
+        for dep_ref in dependencies:
+            if dep_ref in component_map:
+                G.add_edge(component_name, dep_ref)
 
     return G
 
@@ -31,6 +42,12 @@ def visualize_graph(G):
 
 if __name__ == "__main__":
     sbom_file = "path_to_your_sbom.json"  # Замените на путь к вашему SBOM файлу
-    sbom_data = parse_cyclonedx(sbom_file)
-    G = build_graph(sbom_data)
-    visualize_graph(G)
+    try:
+        sbom_data = parse_cyclonedx(sbom_file)
+        G = build_graph(sbom_data)
+        if G.number_of_nodes() > 0:
+            visualize_graph(G)
+        else:
+            print("No components found in the SBOM file.")
+    except Exception as e:
+        print(f"Error processing the SBOM file: {e}")
