@@ -69,7 +69,9 @@ def visualize_graph(G, output_html='dependency_graph.html', output_image='depend
             colorscale='YlGnBu',
             size=10,
             color=[],
-            line_width=2))
+            line_width=2),
+        textposition="top center",
+        textfont=dict(size=10))
 
     node_adjacencies = []
     node_text = []
@@ -78,7 +80,7 @@ def visualize_graph(G, output_html='dependency_graph.html', output_image='depend
         node_text.append('# of connections: '+str(len(adjacencies[1])))
 
     node_trace.marker.color = node_adjacencies
-    node_trace.text = node_text
+    node_trace.text = list(G.nodes())
 
     fig = go.Figure(data=[edge_trace, node_trace],
                     layout=go.Layout(
