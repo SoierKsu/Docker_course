@@ -1,0 +1,419 @@
+Для описанного вами сценария можно построить два пайплайна, один для сборки и отправки на проверку, второй — для анализа безопасности. Описание пайплайнов будет следующее:
+
+### Пайплайн 1: Сборка ПО и отправка на проверку
+1. **Шаг 1.1: Сборка ПО**
+    - Из исходных кодов собирается приложение.
+    - Создается SBOM (Software Bill of Materials) файл, который описывает компоненты, зависимости и библиотеки, используемые в приложении.
+
+2. **Шаг 1.2: Создание Docker-образа**
+    - Создается Docker-образ с собранным приложением.
+    - В Docker-образе добавляются метаданные, включая ссылку на SBOM файл.
+
+3. **Шаг 1.3: Отправка данных на второй пайплайн**
+    - Отправляется:
+        - SBOM файл.
+        - Исходные коды.
+        - Ссылка на Docker-образ.
+    - Пайплайн использует HTTP-запрос (или другой механизм) для триггера второго пайплайна.
+    - Пример запроса для триггера:
+      ```yaml
+      - name: Trigger Security Check Pipeline
+        run: |
+          curl -X POST "https://security-pipeline-url/trigger" \
+            -H "Content-Type: application/json" \
+            -d '{
+                "sbom": "path/to/sbom",
+                "source_code": "path/to/source_code",
+                "docker_image": "docker_registry_url/image"
+            }'
+      ```
+
+4. **Шаг 1.4: Ожидание завершения второго пайплайна**
+    - Пайплайн 1 периодически проверяет статус второго пайплайна (например, через HTTP-запросы к API второго пайплайна).
+    - Пример запроса для проверки статуса:
+      ```yaml
+      - name: Check Security Pipeline Status
+        run: |
+          while :; do
+            status=$(curl -s "https://security-pipeline-url/status")
+            if [ "$status" == "completed" ]; then
+              break
+            fi
+            sleep 30
+          done
+      ```
+
+5. **Шаг 1.5: Загрузка отчетов и итогового статуса**
+    - После завершения второго пайплайна, скачиваются отчеты и итоговый статус.
+    - В случае успешного прохождения проверки, пайплайн 1 завершает процесс.
+    - Пример запроса для получения отчета:
+      ```yaml
+      - name: Download Security Reports
+        run: |
+          curl -o security_report.txt "https://security-pipeline-url/report"
+      ```
+
+### Пайплайн 2: Проверка безопасности (SCA, SAST и уязвимости)
+1. **Шаг 2.1: Получение данных**
+    - Пайплайн получает на вход:
+        - SBOM файл.
+        - Исходные коды.
+        - Ссылку на Docker-образ.
+    
+2. **Шаг 2.2: Проведение SCA (Software Composition Analysis)**
+    - Выполняется анализ состава ПО для выявления уязвимостей в зависимостях, библиотеках и других компонентах.
+    - Используется инструмент типа **OWASP Dependency-Check**, **Snyk**, **CycloneDX** для генерации отчетов по зависимостям.
+
+3. **Шаг 2.3: Проведение SAST (Static Application Security Testing)**
+    - Проводится статический анализ исходного кода для выявления уязвимостей в логике приложения.
+    - Используются инструменты типа **SonarQube**, **Checkmarx** или **CodeQL** для анализа исходного кода.
+
+4. **Шаг 2.4: Анализ уязвимостей**
+    - Результаты анализа SCA и SAST проверяются на наличие уязвимостей, которые имеют степень серьезности выше **high**.
+    - Если уязвимости выше этого уровня найдены, пайплайн завершает работу с ошибкой и сообщает об этом.
+    - Пример проверки уязвимостей:
+      ```yaml
+      - name: Check for High Vulnerabilities
+        run: |
+          if grep -q 'HIGH' security_report.txt; then
+            echo "High vulnerability found!"
+            exit 1
+          fi
+      ```
+
+5. **Шаг 2.5: Подписание Docker-образа**
+    - Если все проверки прошли успешно (нет уязвимостей выше high), то Docker-образ подписывается (например, с помощью **cosign**).
+    - Пример команды для подписания образа:
+      ```bash
+      cosign sign --key cosign.key docker.io/myuser/myimage:latest
+      ```
+
+6. **Шаг 2.6: Перемещение Docker-образа в другой репозиторий**
+    - После подписания Docker-образ перемещается в другой Docker-репозиторий (например, в приватный registry).
+    - Пример команды для перемещения:
+      ```bash
+      docker tag myimage:latest my-private-repo/myimage:latest
+      docker push my-private-repo/myimage:latest
+      ```
+
+7. **Шаг 2.7: Публикация отчета и итогового статуса**
+    - Генерируются и публикуются отчеты по результатам анализа безопасности (SCA и SAST).
+    - Итоговый статус (успех или ошибка) публикуется, например, через HTTP API для возврата статуса в первый пайплайн.
+    - Пример публикации:
+      ```yaml
+      - name: Publish Security Report and Status
+        run: |
+          curl -X POST "https://build-pipeline-url/status" \
+            -H "Content-Type: application/json" \
+            -d '{
+                "status": "completed",
+                "vulnerabilities_found": false,
+                "report_url": "https://security-pipeline-url/report"
+            }'
+      ```
+
+### Обзор процесса
+- **Пайплайн 1** занимается сборкой ПО и отправкой данных на проверку, а затем следит за статусом второго пайплайна, чтобы получить результаты анализа.
+- **Пайплайн 2** выполняет проверку безопасности, включая SCA, SAST, анализ на уязвимости и подписание Docker-образа в случае успешных проверок.
+
+Пайплайны могут быть настроены в любом CI/CD инструменте (например, GitLab CI, Jenkins, GitHub Actions) с использованием соответствующих шагов и инструментов для безопасности.
+
+Конечно, вот два готовых пайплайна на основе вашего запроса:
+
+### Пайплайн 1: Сборка ПО и отправка на проверку
+
+```yaml
+# Pipeline 1: Build and Trigger Security Check
+stages:
+  - build
+  - trigger_security_check
+  - check_status
+  - download_report
+
+variables:
+  DOCKER_IMAGE: "docker-registry/my-app:latest"
+  SECURITY_PIPELINE_URL: "https://security-pipeline-url/trigger"
+  STATUS_CHECK_URL: "https://security-pipeline-url/status"
+  REPORT_URL: "https://security-pipeline-url/report"
+
+build:
+  stage: build
+  script:
+    - echo "Building application from source..."
+    - # Команды сборки приложения (например, `make build` или `npm run build`)
+    - echo "Generating SBOM..."
+    - # Команда для генерации SBOM, например с помощью `syft` или другого инструмента
+    - syft . -o cyclonedx-json > sbom.json
+    - echo "Building Docker image..."
+    - docker build -t $DOCKER_IMAGE .
+    - docker push $DOCKER_IMAGE
+
+trigger_security_check:
+  stage: trigger_security_check
+  script:
+    - echo "Triggering security check pipeline..."
+    - curl -X POST $SECURITY_PIPELINE_URL \
+        -H "Content-Type: application/json" \
+        -d '{
+            "sbom": "sbom.json",
+            "source_code": "path/to/source_code",
+            "docker_image": "'$DOCKER_IMAGE'"
+        }'
+
+check_status:
+  stage: check_status
+  script:
+    - echo "Checking security pipeline status..."
+    - |
+      while :; do
+        status=$(curl -s $STATUS_CHECK_URL)
+        if [ "$status" == "completed" ]; then
+          echo "Security checks completed"
+          break
+        fi
+        echo "Waiting for security checks to complete..."
+        sleep 30
+      done
+
+download_report:
+  stage: download_report
+  script:
+    - echo "Downloading security report..."
+    - curl -o security_report.txt $REPORT_URL
+    - echo "Security check completed. Report:"
+    - cat security_report.txt
+```
+
+---
+
+### Пайплайн 2: Проверка безопасности (SCA, SAST, уязвимости)
+
+```yaml
+# Pipeline 2: Security Checks (SCA, SAST, Vulnerability Scanning)
+stages:
+  - receive_data
+  - sca_analysis
+  - sast_analysis
+  - check_vulnerabilities
+  - sign_docker_image
+  - move_docker_image
+  - publish_results
+
+variables:
+  DOCKER_IMAGE: "docker-registry/my-app:latest"
+  DOCKER_IMAGE_SIGNED: "docker-registry/my-app-signed:latest"
+  REPORT_FILE: "security_report.txt"
+
+receive_data:
+  stage: receive_data
+  script:
+    - echo "Receiving input data..."
+    - # Получаем sbom, исходный код и docker image
+    - echo "SBOM received: $SBOM_FILE"
+    - echo "Source code and docker image received."
+
+sca_analysis:
+  stage: sca_analysis
+  script:
+    - echo "Running Software Composition Analysis (SCA)..."
+    - # Пример использования OWASP Dependency-Check для SCA
+    - dependency-check --project "MyApp" --scan . --out sca_report.json
+    - echo "SCA analysis completed."
+
+sast_analysis:
+  stage: sast_analysis
+  script:
+    - echo "Running Static Application Security Testing (SAST)..."
+    - # Пример использования SonarQube или другой системы для анализа исходного кода
+    - sonar-scanner -Dsonar.projectKey=my-app -Dsonar.sources=.
+    - echo "SAST analysis completed."
+
+check_vulnerabilities:
+  stage: check_vulnerabilities
+  script:
+    - echo "Checking for high vulnerabilities..."
+    - |
+      if grep -q 'HIGH' sca_report.json; then
+        echo "High vulnerabilities found in SCA report."
+        exit 1
+      fi
+      if grep -q 'HIGH' sast_report.txt; then
+        echo "High vulnerabilities found in SAST report."
+        exit 1
+      fi
+      echo "No high vulnerabilities found."
+
+sign_docker_image:
+  stage: sign_docker_image
+  script:
+    - echo "Signing Docker image..."
+    - cosign sign --key cosign.key $DOCKER_IMAGE
+    - echo "Docker image signed."
+
+move_docker_image:
+  stage: move_docker_image
+  script:
+    - echo "Moving Docker image to private repository..."
+    - docker tag $DOCKER_IMAGE $DOCKER_IMAGE_SIGNED
+    - docker push $DOCKER_IMAGE_SIGNED
+    - echo "Docker image moved to private repo."
+
+publish_results:
+  stage: publish_results
+  script:
+    - echo "Publishing results..."
+    - curl -X POST $BUILD_PIPELINE_URL/status \
+        -H "Content-Type: application/json" \
+        -d '{
+            "status": "completed",
+            "vulnerabilities_found": false,
+            "report_url": "https://security-pipeline-url/report"
+        }'
+    - echo "Security check completed. Results published."
+```
+
+---
+
+### Краткое описание пайплайнов:
+
+- **Пайплайн 1**: 
+  1. Сборка ПО и создание Docker-образа.
+  2. Генерация SBOM файла.
+  3. Триггерит второй пайплайн для анализа безопасности.
+  4. Ожидает завершения второго пайплайна.
+  5. Загружает отчет и выводит итоговый статус.
+
+- **Пайплайн 2**: 
+  1. Получает исходные данные (SBOM, исходный код и Docker-образ).
+  2. Проводит анализ состава (SCA) и статический анализ безопасности (SAST).
+  3. Проверяет наличие уязвимостей (выше уровня high).
+  4. Если все проверки пройдены, подписывает Docker-образ.
+  5. Перемещает подписанный образ в другой репозиторий.
+  6. Публикует отчет и итоговый статус.
+
+Этот процесс предполагает использование соответствующих инструментов для анализа безопасности и подписания Docker-образов, таких как **OWASP Dependency-Check**, **SonarQube**, **cosign**, и других.
+
+Конечно, вот два готовых пайплайна, реализующих описанный процесс.
+
+### Пайплайн 1: Сборка ПО и отправка на проверку безопасности
+
+```yaml
+stages:
+  - build
+  - trigger_security_check
+  - wait_for_security_check
+  - download_reports
+
+variables:
+  DOCKER_IMAGE_NAME: "myapp"
+  DOCKER_REGISTRY: "docker.io"
+  SECURITY_PIPELINE_URL: "https://security-pipeline-url/trigger"
+  STATUS_URL: "https://security-pipeline-url/status"
+  REPORT_URL: "https://security-pipeline-url/report"
+
+# Сборка приложения и создание Docker-образа
+build:
+  stage: build
+  script:
+    - echo "Building application from source code"
+    - ./build.sh  # Скрипт сборки вашего приложения
+    - echo "Generating SBOM file"
+    - sbom-generator > sbom.json  # Генерация SBOM файла
+    - echo "Building Docker image"
+    - docker build -t $DOCKER_REGISTRY/$DOCKER_IMAGE_NAME:latest .
+    - docker push $DOCKER_REGISTRY/$DOCKER_IMAGE_NAME:latest
+
+# Отправка данных на второй пайплайн для проверки безопасности
+trigger_security_check:
+  stage: trigger_security_check
+  script:
+    - echo "Triggering security pipeline"
+    - |
+      curl -X POST "$SECURITY_PIPELINE_URL" \
+        -H "Content-Type: application/json" \
+        -d '{
+              "sbom": "path/to/sbom.json",
+              "source_code": "path/to/source_code",
+              "docker_image": "'$DOCKER_REGISTRY/$DOCKER_IMAGE_NAME:latest'"
+            }'
+
+# Ожидание завершения второго пайплайна
+wait_for_security_check:
+  stage: wait_for_security_check
+  script:
+    - echo "Waiting for security pipeline to finish"
+    - |
+      while :; do
+        status=$(curl -s "$STATUS_URL")
+        if [ "$status" == "completed" ]; then
+          break
+        fi
+        sleep 30
+      done
+
+# Загрузка отчетов и итогового статуса из второго пайплайна
+download_reports:
+  stage: download_reports
+  script:
+    - echo "Downloading security reports"
+    - curl -o security_report.txt "$REPORT_URL"
+    - echo "Security check completed"
+    - cat security_report.txt
+```
+
+---
+
+### Пайплайн 2: Проверка безопасности (SCA, SAST, уязвимости)
+
+```yaml
+stages:
+  - security_scan
+  - sign_and_publish
+
+variables:
+  DOCKER_IMAGE_NAME: "myapp"
+  DOCKER_REGISTRY: "docker.io"
+  COSIGN_KEY: "/path/to/cosign.key"
+  STATUS_URL: "https://build-pipeline-url/status"
+  REPORT_PATH: "/path/to/security_report.txt"
+
+# Проведение SCA и SAST анализа
+security_scan:
+  stage: security_scan
+  script:
+    - echo "Running SCA (Software Composition Analysis)"
+    - snyk test --all-projects --json > snyk_report.json
+    - echo "Running SAST (Static Application Security Testing)"
+    - sonar-scanner -Dsonar.projectKey=myapp -Dsonar.host.url=http://sonarqube-server
+    - echo "Checking for vulnerabilities above high severity"
+    - |
+      high_vulnerabilities=$(grep -i "HIGH" snyk_report.json)
+      if [ -n "$high_vulnerabilities" ]; then
+        echo "High vulnerabilities found!"
+        exit 1
+      fi
+
+# Подписание Docker-образа и его публикация в другой репозиторий
+sign_and_publish:
+  stage: sign_and_publish
+  script:
+    - echo "Signing Docker image"
+    - cosign sign --key $COSIGN_KEY $DOCKER_REGISTRY/$DOCKER_IMAGE_NAME:latest
+    - echo "Pushing signed Docker image to private registry"
+    - docker tag $DOCKER_REGISTRY/$DOCKER_IMAGE_NAME:latest my-private-repo/$DOCKER_IMAGE_NAME:latest
+    - docker push my-private-repo/$DOCKER_IMAGE_NAME:latest
+    - echo "Publishing security report"
+    - curl -X POST "$STATUS_URL" -H "Content-Type: application/json" -d '{
+        "status": "completed",
+        "vulnerabilities_found": false,
+        "report_url": "https://security-pipeline-url/report"
+      }'
+```
+
+### Примечания:
+- В первом пайплайне используется `curl` для отправки SBOM, исходных кодов и Docker-образа во второй пайплайн для проверки безопасности.
+- Во втором пайплайне осуществляется выполнение SCA и SAST (с помощью инструментов как `snyk` и `sonar-scanner`), проверка на уязвимости выше "high" и, если уязвимостей нет, подписание Docker-образа с помощью `cosign` и его публикация в другой репозиторий.
+- Все стадии во втором пайплайне проверяют уязвимости и, если они обнаружены, завершают процесс с ошибкой, иначе подписывают и отправляют образ в приватный репозиторий.
+- Пайплайн 1 отслеживает статус второго пайплайна и скачивает итоговый отчет, когда второй пайплайн завершает свою работу.
+
+Эти пайплайны предполагают, что у вас уже настроены необходимые инструменты для сборки, проверки безопасности и работы с Docker (например, `snyk`, `cosign`, `sonar-scanner`, и другие).
